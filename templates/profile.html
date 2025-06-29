@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - MedTrak{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-user me-2"></i>My Profile
+            </h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Profile Picture and Basic Info -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <div class="profile-picture-container mb-3">
+                        {% if user.profile_picture %}
+                            <img src="{{ url_for('uploaded_file', filename=user.profile_picture) }}" 
+                                 alt="Profile Picture" 
+                                 class="rounded-circle profile-picture"
+                                 style="width: 150px; height: 150px; object-fit: cover;">
+                        {% else %}
+                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center mx-auto profile-picture-placeholder" 
+                                 style="width: 150px; height: 150px; font-size: 3rem;">
+                                <i class="fas fa-user"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <h4 class="mb-1">{{ user.first_name }} {{ user.last_name }}</h4>
+                    <p class="text-muted mb-3">
+                        {% if session.user_role == 'doctor' %}
+                            <i class="fas fa-user-md me-1"></i>Doctor
+                            {% if profile.specialization %}
+                                - {{ profile.specialization }}
+                            {% endif %}
+                        {% else %}
+                            <i class="fas fa-user me-1"></i>Patient
+                        {% endif %}
+                    </p>
+                    
+                    <button class="btn btn-outline-primary btn-sm mb-2" data-bs-toggle="modal" data-bs-target="#uploadPictureModal">
+                        <i class="fas fa-camera me-1"></i>Change Picture
+                    </button>
+                    
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="fas fa-calendar me-1"></i>Member since {{ user.created_at[:10] }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Stats -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Quick Stats</h5>
+                </div>
+                <div class="card-body">
+                    {% if session.user_role == 'patient' %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Total Appointments:</span>
+                            <span class="badge bg-primary">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Medical Records:</span>
+                            <span class="badge bg-info">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Upcoming:</span>
+                            <span class="badge bg-success">0</span>
+                        </div>
+                    {% else %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Patients Treated:</span>
+                            <span class="badge bg-primary">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Appointments Today:</span>
+                            <span class="badge bg-success">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Experience:</span>
+                            <span class="badge bg-info">{{ profile.experience_years or 0 }} years</span>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Profile Details -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Profile Information</h5>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editProfileModal">
+                        <i class="fas fa-edit me-1"></i>Edit Profile
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Personal Information</h6>
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Full Name:</strong></td>
+                                    <td>{{ user.first_name }} {{ user.last_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>{{ user.email }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phone:</strong></td>
+                                    <td>{{ user.phone or 'Not provided' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Username:</strong></td>
+                                    <td>{{ user.username }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {% if session.user_role == 'doctor' %}
+                                <h6 class="text-muted">Professional Information</h6>
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <td><strong>Specialization:</strong></td>
+                                        <td>{{ profile.specialization or 'Not specified' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>License Number:</strong></td>
+                                        <td>{{ profile.license_number or 'Not provided' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Experience:</strong></td>
+                                        <td>{{ profile.experience_years or 0 }} years</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Consultation Fee:</strong></td>
+                                        <td>₹{{ profile.consultation_fee or 0 }}</td>
+                                    </tr>
+                                </table>
+                            {% else %}
+                                <h6 class="text-muted">Medical Information</h6>
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <td><strong>Date of Birth:</strong></td>
+                                        <td>{{ profile.date_of_birth or 'Not provided' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Gender:</strong></td>
+                                        <td>{{ profile.gender.title() if profile.gender else 'Not specified' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Blood Type:</strong></td>
+                                        <td>{{ profile.blood_type or 'Not specified' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Emergency Contact:</strong></td>
+                                        <td>{{ profile.emergency_contact or 'Not provided' }}</td>
+                                    </tr>
+                                </table>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if session.user_role == 'doctor' and profile.bio %}
+                        <div class="mt-4">
+                            <h6 class="text-muted">Biography</h6>
+                            <p class="text-justify">{{ profile.bio }}</p>
+                        </div>
+                    {% elif session.user_role == 'patient' and profile.medical_history %}
+                        <div class="mt-4">
+                            <h6 class="text-muted">Medical History</h6>
+                            <p class="text-justify">{{ profile.medical_history }}</p>
+                        </div>
+                    {% endif %}
+                    
+                    {% if session.user_role == 'patient' and profile.allergies %}
+                        <div class="mt-3">
+                            <h6 class="text-muted">Allergies</h6>
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>{{ profile.allergies }}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Profile Picture Modal -->
+<div class="modal fade" id="uploadPictureModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Change Profile Picture</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="uploadPictureForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="profile_picture" class="form-label">Select Picture</label>
+                        <input type="file" class="form-control" id="profile_picture" name="profile_picture" accept="image/*" required>
+                        <div class="form-text">Supported formats: JPG, PNG, GIF, WebP (Max 16MB)</div>
+                    </div>
+                    <div id="imagePreview" class="text-center" style="display: none;">
+                        <img id="previewImg" src="/placeholder.svg" alt="Preview" class="img-thumbnail" style="max-width: 200px; max-height: 200px;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload Picture</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="modal fade" id="editProfileModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Profile</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('edit_profile') }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="first_name" class="form-label">First Name</label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" value="{{ user.first_name }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="last_name" class="form-label">Last Name</label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" value="{{ user.last_name }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Phone Number</label>
+                        <input type="tel" class="form-control" id="phone" name="phone" value="{{ user.phone or '' }}">
+                    </div>
+                    
+                    {% if session.user_role == 'doctor' %}
+                        <div class="mb-3">
+                            <label for="specialization" class="form-label">Specialization</label>
+                            <input type="text" class="form-control" id="specialization" name="specialization" value="{{ profile.specialization or '' }}">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="experience_years" class="form-label">Years of Experience</label>
+                                <input type="number" class="form-control" id="experience_years" name="experience_years" value="{{ profile.experience_years or 0 }}" min="0">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="consultation_fee" class="form-label">Consultation Fee (₹)</label>
+                                <input type="number" class="form-control" id="consultation_fee" name="consultation_fee" value="{{ profile.consultation_fee or 0 }}" min="0" step="0.01">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="bio" class="form-label">Biography</label>
+                            <textarea class="form-control" id="bio" name="bio" rows="4" placeholder="Tell patients about yourself...">{{ profile.bio or '' }}</textarea>
+                        </div>
+                    {% else %}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="date_of_birth" class="form-label">Date of Birth</label>
+                                <input type="date" class="form-control" id="date_of_birth" name="date_of_birth" value="{{ profile.date_of_birth or '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="gender" class="form-label">Gender</label>
+                                <select class="form-select" id="gender" name="gender">
+                                    <option value="">Select gender</option>
+                                    <option value="male" {% if profile.gender == 'male' %}selected{% endif %}>Male</option>
+                                    <option value="female" {% if profile.gender == 'female' %}selected{% endif %}>Female</option>
+                                    <option value="other" {% if profile.gender == 'other' %}selected{% endif %}>Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="blood_type" class="form-label">Blood Type</label>
+                            <select class="form-select" id="blood_type" name="blood_type">
+                                <option value="">Select blood type</option>
+                                <option value="A+" {% if profile.blood_type == 'A+' %}selected{% endif %}>A+</option>
+                                <option value="A-" {% if profile.blood_type == 'A-' %}selected{% endif %}>A-</option>
+                                <option value="B+" {% if profile.blood_type == 'B+' %}selected{% endif %}>B+</option>
+                                <option value="B-" {% if profile.blood_type == 'B-' %}selected{% endif %}>B-</option>
+                                <option value="AB+" {% if profile.blood_type == 'AB+' %}selected{% endif %}>AB+</option>
+                                <option value="AB-" {% if profile.blood_type == 'AB-' %}selected{% endif %}>AB-</option>
+                                <option value="O+" {% if profile.blood_type == 'O+' %}selected{% endif %}>O+</option>
+                                <option value="O-" {% if profile.blood_type == 'O-' %}selected{% endif %}>O-</option>
+                            </select>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="emergency_contact" class="form-label">Emergency Contact</label>
+                                <input type="text" class="form-control" id="emergency_contact" name="emergency_contact" value="{{ profile.emergency_contact or '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="emergency_phone" class="form-label">Emergency Phone</label>
+                                <input type="tel" class="form-control" id="emergency_phone" name="emergency_phone" value="{{ profile.emergency_phone or '' }}">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="medical_history" class="form-label">Medical History</label>
+                            <textarea class="form-control" id="medical_history" name="medical_history" rows="3" placeholder="Previous surgeries, chronic conditions, etc.">{{ profile.medical_history or '' }}</textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="allergies" class="form-label">Allergies</label>
+                            <textarea class="form-control" id="allergies" name="allergies" rows="2" placeholder="Food allergies, drug allergies, etc.">{{ profile.allergies or '' }}</textarea>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Profile picture preview
+document.getElementById('profile_picture').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('previewImg').src = e.target.result;
+            document.getElementById('imagePreview').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Upload profile picture
+document.getElementById('uploadPictureForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('/upload-profile-picture', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Profile picture updated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error uploading picture');
+    });
+});
+</script>
+
+<style>
+.profile-picture {
+    border: 4px solid #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.profile-picture-placeholder {
+    border: 4px solid #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.table-borderless td {
+    border: none;
+    padding: 0.5rem 0;
+}
+
+.table-borderless td:first-child {
+    width: 40%;
+}
+</style>
+{% endblock %}

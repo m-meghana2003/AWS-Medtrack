@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Patient Records - MedTrak{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-file-medical me-2"></i>Patient Medical Records
+                <a href="{{ url_for('doctor_dashboard') }}" class="btn btn-outline-secondary btn-sm ms-3">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Patient Selection -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Select Patient</h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET">
+                        <div class="mb-3">
+                            <label for="patient_search" class="form-label">Search Patient</label>
+                            <input type="text" class="form-control" id="patient_search" name="search" 
+                                   value="{{ request.args.get('search', '') }}" 
+                                   placeholder="Search by name or email...">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-search me-1"></i>Search
+                        </button>
+                    </form>
+                    
+                    {% if patients %}
+                        <div class="mt-3">
+                            <h6 class="text-muted">Patients:</h6>
+                            <div class="list-group">
+                                {% for patient in patients %}
+                                <a href="{{ url_for('doctor_patient_records', patient_id=patient.id) }}" 
+                                   class="list-group-item list-group-item-action {% if selected_patient and selected_patient.id == patient.id %}active{% endif %}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">{{ patient.first_name }} {{ patient.last_name }}</h6>
+                                            <small>{{ patient.email }}</small>
+                                        </div>
+                                        <small>{{ patient.phone or '' }}</small>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Patient Records -->
+        <div class="col-lg-8">
+            {% if selected_patient %}
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user me-2"></i>{{ selected_patient.first_name }} {{ selected_patient.last_name }}'s Records
+                        </h5>
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadRecordModal">
+                            <i class="fas fa-plus me-1"></i>Add Record
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        {% if records %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Title</th>
+                                            <th>Type</th>
+                                            <th>Date Added</th>
+                                            <th>File</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for record in records %}
+                                        <tr>
+                                            <td>{{ record.title }}</td>
+                                            <td><span class="badge bg-info">{{ record.record_type.title() }}</span></td>
+                                            <td>{{ record.created_at[:10] }}</td>
+                                            <td>
+                                                {% if record.file_path %}
+                                                    <i class="fas fa-file text-success"></i>
+                                                {% else %}
+                                                    <i class="fas fa-file-alt text-muted"></i>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if record.file_path %}
+                                                    <a href="{{ url_for('uploaded_file', filename=record.file_path.split('/')[-1]) }}" 
+                                                       class="btn btn-sm btn-outline-success me-1" target="_blank">
+                                                        <i class="fas fa-download"></i>
+                                                    </a>
+                                                {% endif %}
+                                                <button class="btn btn-sm btn-outline-primary" 
+                                                        data-bs-toggle="modal" 
+                                                        data-bs-target="#shareRecordModal"
+                                                        onclick="setShareRecord('{{ record.id }}', '{{ record.title }}')"></button>
+                                                    <i class="fas fa-share"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-file-medical-alt fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">No medical records found for this patient</p>
+                                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadRecordModal">
+                                    <i class="fas fa-plus me-1"></i>Add First Record
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-user-plus fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">Select a Patient</h5>
+                        <p class="text-muted">Choose a patient from the left panel to view and manage their medical records.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Upload Record Modal -->
+{% if selected_patient %}
+<div class="modal fade" id="uploadRecordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Medical Record for {{ selected_patient.first_name }} {{ selected_patient.last_name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="uploadRecordForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" name="patient_id" value="{{ selected_patient.id }}">
+                    
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="record_type" class="form-label">Type</label>
+                        <select class="form-select" id="record_type" name="record_type" required>
+                            <option value="prescription">Prescription</option>
+                            <option value="diagnosis">Diagnosis</option>
+                            <option value="lab_result">Lab Result</option>
+                            <option value="xray">X-Ray/Imaging</option>
+                            <option value="report">Medical Report</option>
+                            <option value="note">Clinical Note</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" 
+                                  placeholder="Additional notes or description..."></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Attach File (Optional)</label>
+                        <input type="file" class="form-control" id="file" name="file">
+                        <div class="form-text">Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 16MB)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Share Record Modal -->
+<div class="modal fade" id="shareRecordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Share Medical Record</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Share "<span id="shareRecordTitle"></span>" with {{ selected_patient.first_name }} {{ selected_patient.last_name }}?</p>
+                <p class="text-muted">The patient will be notified and can access this record from their dashboard.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="shareRecord()">Share Record</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+let currentRecordId = null;
+
+function setShareRecord(recordId, title) {
+    currentRecordId = recordId;
+    document.getElementById('shareRecordTitle').textContent = title;
+}
+
+function shareRecord() {
+    if (currentRecordId) {
+        fetch('/share-record/' + currentRecordId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Record shared successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error sharing record');
+        });
+    }
+}
+
+// Upload record form
+document.getElementById('uploadRecordForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('/upload-record', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Medical record added successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error adding record');
+    });
+});
+</script>
+{% endblock %}

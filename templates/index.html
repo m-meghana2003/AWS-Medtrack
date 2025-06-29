@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero-section bg-primary text-white py-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 fw-bold mb-4">Welcome to MedTrak</h1>
+                <p class="lead mb-4">Your comprehensive medical appointment management system. Connect with healthcare professionals, manage your appointments, and keep track of your medical records all in one place.</p>
+                {% if not session.user_id %}
+                    <div class="d-flex gap-3">
+                        <a href="{{ url_for('register') }}" class="btn btn-light btn-lg">Get Started</a>
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">Sign In</a>
+                    </div>
+                {% else %}
+                    <a href="{{ url_for('patient_dashboard' if session.user_role == 'patient' else 'doctor_dashboard') }}" class="btn btn-light btn-lg">
+                        Go to Dashboard
+                    </a>
+                {% endif %}
+            </div>
+            <div class="col-lg-6">
+                <img src="/static/images/medtrack.jpg" alt="Medical Care" class="img-fluid rounded shadow">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <i class="fas fa-calendar-check fa-3x text-primary"></i>
+                    </div>
+                    <h5 class="card-title">Easy Appointment Booking</h5>
+                    <p class="card-text">Schedule appointments with your preferred doctors at your convenience. View available slots and book instantly.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <i class="fas fa-file-medical fa-3x text-success"></i>
+                    </div>
+                    <h5 class="card-title">Secure Medical Records</h5>
+                    <p class="card-text">Store and share your medical documents securely. Access your health records anytime, anywhere.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <i class="fas fa-user-md fa-3x text-info"></i>
+                    </div>
+                    <h5 class="card-title">Find Specialists</h5>
+                    <p class="card-text">Search and connect with healthcare professionals based on specialization and location.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-light py-5">
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-6">
+                <h2 class="mb-4">For Patients</h2>
+                <ul class="list-unstyled">
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Book and manage appointments</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Upload and share medical records</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Search for doctors by specialization</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Receive appointment reminders</li>
+                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Manage your health profile</li>
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                <h2 class="mb-4">For Doctors</h2>
+                <ul class="list-unstyled">
+                    <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Manage your appointment schedule</li>
+                    <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Access patient medical records</li>
+                    <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Update patient information</li>
+                    <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Track appointment history</li>
+                    <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Manage your professional profile</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
