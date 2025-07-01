@@ -1,5 +1,105 @@
+# Core Flask Framework
 Flask==3.0.3
 Werkzeug==3.0.3
-sqlite3
+
+# Image Processing for profile pictures and medical records
 Pillow==10.4.0
+
+# Environment Variables
 python-dotenv==1.0.1
+
+# Email Support for prescription sending
+secure-smtplib==0.1.1
+
+# File Upload Security
+python-magic==0.4.27
+
+# Password Hashing (enhanced security)
+bcrypt==4.1.2
+
+# Date/Time Utilities
+python-dateutil==2.8.2
+
+# PDF Generation for prescriptions
+reportlab==4.0.7
+
+# QR Code generation for prescription verification
+qrcode[pil]==7.4.2
+
+# Data Export (CSV/Excel for medical records)
+openpyxl==3.1.2
+
+# Email Templates and HTML processing
+Jinja2==3.1.2
+
+# HTTP Requests for future API integrations
+requests==2.31.0
+
+# JSON Web Tokens for enhanced authentication
+PyJWT==2.8.0
+
+# Input validation and sanitization
+bleach==6.1.0
+
+# Phone number validation
+phonenumbers==8.13.26
+
+# Email validation
+email-validator==2.1.0
+
+# Timezone support
+pytz==2023.3
+
+# Backup compression
+zipfile36==0.1.3
+
+# Development and Testing
+pytest==7.4.3
+pytest-flask==1.3.0
+
+# Production Server
+gunicorn==21.2.0
+
+# Security Headers
+flask-talisman==1.1.0
+
+# Rate Limiting
+Flask-Limiter==3.5.0
+
+# CORS Support
+Flask-CORS==4.0.0
+
+# Caching
+Flask-Caching==2.1.0
+
+# Form Handling
+Flask-WTF==1.2.1
+WTForms==3.1.1
+
+# Session Management
+Flask-Session==0.5.0
+
+# Database Migration (for future schema updates)
+Flask-Migrate==4.0.5
+
+# Logging
+colorlog==6.8.0
+
+# Configuration Management
+python-decouple==3.8
+
+# Error Tracking
+sentry-sdk[flask]==1.38.0
+
+# Health Checks
+healthcheck==1.3.3
+
+# Code Quality (Development)
+black==23.11.0
+flake8==6.1.0
+
+# Security Scanning (Development)
+bandit==1.7.5
+
+# Test Coverage (Development)
+coverage==7.3.2
