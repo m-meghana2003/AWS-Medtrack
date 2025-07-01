@@ -23,16 +23,17 @@
                     <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Create New Prescription</h5>
                 </div>
                 <div class="card-body">
-                    <form id="prescriptionForm">
+                    <form id="prescriptionForm" method="POST" action="/create-prescription">
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="patient_select" class="form-label">Select Patient</label>
+                                <label for="patient_select" class="form-label">Select Patient *</label>
                                 <select class="form-select" id="patient_select" name="patient_id" required onchange="loadPatientDetails()">
                                     <option value="">Choose a patient...</option>
                                     {% for patient in patients %}
                                     <option value="{{ patient.id }}">{{ patient.first_name }} {{ patient.last_name }} - {{ patient.email }}</option>
                                     {% endfor %}
                                 </select>
+                                <div class="invalid-feedback">Please select a patient.</div>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="valid_days" class="form-label">Valid for (days)</label>
@@ -58,9 +59,10 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label for="medications" class="form-label">Medications</label>
+                            <label for="medications" class="form-label">Medications *</label>
                             <textarea class="form-control" id="medications" name="medications" rows="6" required 
                                       placeholder="Enter medications with dosage and frequency:&#10;&#10;Example:&#10;1. Amoxicillin 500mg - Take 1 capsule 3 times daily for 7 days&#10;2. Paracetamol 500mg - Take 1 tablet every 6 hours as needed for pain&#10;3. Vitamin D3 1000IU - Take 1 tablet daily"></textarea>
+                            <div class="invalid-feedback">Please enter the medications.</div>
                         </div>
                         
                         <div class="mb-3">
@@ -76,11 +78,19 @@
                             </label>
                         </div>
                         
+                        <!-- Loading indicator -->
+                        <div id="loadingIndicator" class="text-center" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Creating prescription...</span>
+                            </div>
+                            <p class="mt-2">Creating prescription...</p>
+                        </div>
+                        
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" id="submitBtn">
                                 <i class="fas fa-prescription-bottle me-2"></i>Create Prescription
                             </button>
-                            <button type="reset" class="btn btn-secondary">
+                            <button type="reset" class="btn btn-secondary" onclick="resetForm()">
                                 <i class="fas fa-undo me-2"></i>Reset Form
                             </button>
                         </div>
@@ -202,7 +212,34 @@
     </div>
 </div>
 
+<!-- Success Modal -->
+<div class="modal fade" id="successModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle me-2"></i>Prescription Created Successfully
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <i class="fas fa-prescription-bottle fa-3x text-success mb-3"></i>
+                    <h6>Prescription Number: <span id="prescriptionNumber" class="text-primary"></span></h6>
+                    <p id="successMessage" class="mt-3"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="createAnother()">Create Another</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+console.log('Prescription page loaded');
+
 // Prescription templates
 const templates = {
     common_cold: {
@@ -245,6 +282,7 @@ const templates = {
 };
 
 function useTemplate(templateName) {
+    console.log('Using template:', templateName);
     const template = templates[templateName];
     if (template) {
         document.getElementById('diagnosis').value = template.diagnosis;
@@ -255,10 +293,16 @@ function useTemplate(templateName) {
 
 function loadPatientDetails() {
     const patientId = document.getElementById('patient_select').value;
+    console.log('Loading patient details for ID:', patientId);
+    
     if (patientId) {
         fetch(`/api/patient/${patientId}`)
-            .then(response => response.json())
+            .then(response => {
+                console.log('Patient API response status:', response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log('Patient data received:', data);
                 if (data.success) {
                     const patient = data.patient;
                     const detailsHtml = `
@@ -290,34 +334,135 @@ function loadPatientDetails() {
     }
 }
 
+function resetForm() {
+    document.getElementById('prescriptionForm').reset();
+    document.getElementById('patientDetails').style.display = 'none';
+    // Remove validation classes
+    document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+}
+
+function validateForm() {
+    let isValid = true;
+    
+    // Check patient selection
+    const patientSelect = document.getElementById('patient_select');
+    if (!patientSelect.value) {
+        patientSelect.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        patientSelect.classList.remove('is-invalid');
+    }
+    
+    // Check medications
+    const medications = document.getElementById('medications');
+    if (!medications.value.trim()) {
+        medications.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        medications.classList.remove('is-invalid');
+    }
+    
+    return isValid;
+}
+
+function showLoading(show) {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    if (show) {
+        loadingIndicator.style.display = 'block';
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating...';
+    } else {
+        loadingIndicator.style.display = 'none';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-prescription-bottle me-2"></i>Create Prescription';
+    }
+}
+
+function showSuccess(prescriptionNumber, message) {
+    document.getElementById('prescriptionNumber').textContent = prescriptionNumber;
+    document.getElementById('successMessage').textContent = message;
+    const modal = new bootstrap.Modal(document.getElementById('successModal'));
+    modal.show();
+}
+
+function createAnother() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
+    modal.hide();
+    resetForm();
+}
+
 // Handle prescription form submission
-document.getElementById('prescriptionForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, setting up form handler');
     
-    const formData = new FormData(this);
+    const form = document.getElementById('prescriptionForm');
+    if (!form) {
+        console.error('Prescription form not found!');
+        return;
+    }
     
-    fetch('/create-prescription', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message);
-            this.reset();
-            document.getElementById('patientDetails').style.display = 'none';
-            // Refresh the page to show new prescription
-            setTimeout(() => {
-                location.reload();
-            }, 1000);
-        } else {
-            alert('Error: ' + data.message);
+    form.addEventListener('submit', function(e) {
+        console.log('Form submit event triggered');
+        e.preventDefault();
+        
+        // Validate form
+        if (!validateForm()) {
+            console.log('Form validation failed');
+            alert('Please fill in all required fields.');
+            return;
         }
-    })
-    .catch(error => {
-        alert('Error creating prescription');
-        console.error('Error:', error);
+        
+        console.log('Form validation passed, submitting...');
+        showLoading(true);
+        
+        const formData = new FormData(this);
+        
+        // Log form data for debugging
+        for (let [key, value] of formData.entries()) {
+            console.log(`${key}: ${value}`);
+        }
+        
+        fetch('/create-prescription', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return response.json();
+        })
+        .then(data => {
+            console.log('Response data:', data);
+            showLoading(false);
+            
+            if (data.success) {
+                showSuccess(data.prescription_number, data.message);
+                this.reset();
+                document.getElementById('patientDetails').style.display = 'none';
+                
+                // Refresh the page after 3 seconds to show new prescription
+                setTimeout(() => {
+                    location.reload();
+                }, 3000);
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Fetch error:', error);
+            showLoading(false);
+            alert('Error creating prescription: ' + error.message);
+        });
     });
+    
+    console.log('Form handler set up successfully');
 });
 
 function viewPrescription(prescriptionNumber) {
@@ -331,4 +476,29 @@ function resendPrescription(prescriptionId) {
     }
 }
 </script>
+
+<style>
+.is-invalid {
+    border-color: #dc3545;
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #dc3545;
+}
+
+.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+
+#loadingIndicator {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+}
+</style>
 {% endblock %}
