@@ -183,10 +183,10 @@ talisman = Talisman(
 
 # Rate Limiting
 limiter = Limiter(
-    app,
     key_func=get_remote_address,
     default_limits=[app.config['RATELIMIT_DEFAULT']]
 )
+limiter.init_app(app)
 
 # Caching
 cache = Cache(app)
