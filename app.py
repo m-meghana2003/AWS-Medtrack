@@ -751,167 +751,190 @@ def doctor_prescriptions():
 @role_required('doctor')
 def get_patient_details(patient_id):
     """API endpoint to get patient details for prescription form"""
-    conn = get_db_connection()
-    
-    patient = conn.execute('''
-        SELECT u.*, pp.date_of_birth, pp.gender, pp.blood_type, pp.allergies, pp.medical_history
-        FROM users u
-        LEFT JOIN patient_profiles pp ON u.id = pp.user_id
-        WHERE u.id = ? AND u.role = 'patient'
-    ''', (patient_id,)).fetchone()
-    
-    conn.close()
-    
-    if patient:
-        return jsonify({
-            'success': True,
-            'patient': {
-                'id': patient['id'],
-                'name': f"{patient['first_name']} {patient['last_name']}",
-                'email': patient['email'],
-                'phone': patient['phone'],
-                'date_of_birth': patient['date_of_birth'],
-                'gender': patient['gender'],
-                'blood_type': patient['blood_type'],
-                'allergies': patient['allergies'],
-                'medical_history': patient['medical_history']
-            }
-        })
-    else:
-        return jsonify({'success': False, 'message': 'Patient not found'})
+    try:
+        conn = get_db_connection()
+        
+        patient = conn.execute('''
+            SELECT u.*, pp.date_of_birth, pp.gender, pp.blood_type, pp.allergies, pp.medical_history
+            FROM users u
+            LEFT JOIN patient_profiles pp ON u.id = pp.user_id
+            WHERE u.id = ? AND u.role = 'patient'
+        ''', (patient_id,)).fetchone()
+        
+        conn.close()
+        
+        if patient:
+            return jsonify({
+                'success': True,
+                'patient': {
+                    'id': patient['id'],
+                    'name': f"{patient['first_name']} {patient['last_name']}",
+                    'email': patient['email'],
+                    'phone': patient['phone'],
+                    'date_of_birth': patient['date_of_birth'],
+                    'gender': patient['gender'],
+                    'blood_type': patient['blood_type'],
+                    'allergies': patient['allergies'],
+                    'medical_history': patient['medical_history']
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Patient not found'})
+    except Exception as e:
+        app.logger.error(f"Error in get_patient_details: {str(e)}")
+        return jsonify({'success': False, 'message': 'Server error'})
 
 @app.route('/create-prescription', methods=['POST'])
 @login_required
 @role_required('doctor')
 def create_prescription():
-    patient_id = request.form.get('patient_id')
-    medications = request.form.get('medications')
-    instructions = request.form.get('instructions')
-    diagnosis = request.form.get('diagnosis')
-    valid_days = int(request.form.get('valid_days', 30))
-    send_email = request.form.get('send_email') == 'on'
-    
-    if not all([patient_id, medications]):
-        return jsonify({'success': False, 'message': 'Patient and medications are required'})
-    
-    conn = get_db_connection()
-    
-    # Get patient details
-    patient = conn.execute('''
-        SELECT u.*, pp.date_of_birth, pp.gender, pp.allergies
-        FROM users u
-        LEFT JOIN patient_profiles pp ON u.id = pp.user_id
-        WHERE u.id = ? AND u.role = 'patient'
-    ''', (patient_id,)).fetchone()
-    
-    if not patient:
-        conn.close()
-        return jsonify({'success': False, 'message': 'Patient not found'})
-    
-    # Get doctor details
-    doctor = conn.execute('''
-        SELECT u.*, dp.specialization, dp.license_number
-        FROM users u
-        JOIN doctor_profiles dp ON u.id = dp.user_id
-        WHERE u.id = ?
-    ''', (session['user_id'],)).fetchone()
-    
-    # Generate prescription number
-    prescription_number = generate_prescription_number()
-    
-    # Calculate valid until date
-    valid_until = datetime.now().date() + timedelta(days=valid_days)
-    valid_until_str = valid_until.strftime('%Y-%m-%d')
-    
-    # Create prescription
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO prescriptions (patient_id, doctor_id, prescription_number, medications, instructions, diagnosis, valid_until)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (patient_id, session['user_id'], prescription_number, medications, instructions, diagnosis, valid_until_str))
-    
-    prescription_id = cursor.lastrowid
-    
-    # Send email if requested
-    email_sent = False
-    if send_email and patient['email']:
-        email_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <h1 style="color: #2c5aa0; margin-bottom: 10px;">🏥 MedTrak Prescription</h1>
-                    <p style="color: #666; margin: 0;">Digital Prescription Service</p>
-                </div>
-                
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h2 style="color: #2c5aa0; margin-top: 0;">Prescription Details</h2>
-                    <p><strong>Prescription Number:</strong> {prescription_number}</p>
-                    <p><strong>Date Issued:</strong> {datetime.now().strftime('%B %d, %Y')}</p>
-                    <p><strong>Valid Until:</strong> {valid_until.strftime('%B %d, %Y')}</p>
-                </div>
-                
-                <div style="margin-bottom: 20px;">
-                    <h3 style="color: #2c5aa0;">Patient Information</h3>
-                    <p><strong>Name:</strong> {patient['first_name']} {patient['last_name']}</p>
-                    <p><strong>Date of Birth:</strong> {patient['date_of_birth'] or 'Not provided'}</p>
-                    <p><strong>Gender:</strong> {patient['gender'] or 'Not specified'}</p>
-                    {f"<p><strong>Allergies:</strong> <span style='color: #dc3545;'>{patient['allergies']}</span></p>" if patient['allergies'] else ""}
-                </div>
-                
-                <div style="margin-bottom: 20px;">
-                    <h3 style="color: #2c5aa0;">Doctor Information</h3>
-                    <p><strong>Dr. {doctor['first_name']} {doctor['last_name']}</strong></p>
-                    <p><strong>Specialization:</strong> {doctor['specialization']}</p>
-                    <p><strong>License Number:</strong> {doctor['license_number']}</p>
-                </div>
-                
-                {f"<div style='margin-bottom: 20px;'><h3 style='color: #2c5aa0;'>Diagnosis</h3><p>{diagnosis}</p></div>" if diagnosis else ""}
-                
-                <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="color: #2c5aa0; margin-top: 0;">💊 Prescribed Medications</h3>
-                    <div style="white-space: pre-line; font-family: monospace; background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #2c5aa0;">
+    try:
+        app.logger.info("Create prescription route called")
+        app.logger.info(f"Form data: {dict(request.form)}")
+        
+        patient_id = request.form.get('patient_id')
+        medications = request.form.get('medications')
+        instructions = request.form.get('instructions')
+        diagnosis = request.form.get('diagnosis')
+        valid_days = int(request.form.get('valid_days', 30))
+        send_email = request.form.get('send_email') == 'on'
+        
+        app.logger.info(f"Parsed data - Patient ID: {patient_id}, Medications: {medications[:50]}...")
+        
+        if not all([patient_id, medications]):
+            app.logger.warning("Missing required fields")
+            return jsonify({'success': False, 'message': 'Patient and medications are required'})
+        
+        conn = get_db_connection()
+        
+        # Get patient details
+        patient = conn.execute('''
+            SELECT u.*, pp.date_of_birth, pp.gender, pp.allergies
+            FROM users u
+            LEFT JOIN patient_profiles pp ON u.id = pp.user_id
+            WHERE u.id = ? AND u.role = 'patient'
+        ''', (patient_id,)).fetchone()
+        
+        if not patient:
+            conn.close()
+            app.logger.warning(f"Patient not found: {patient_id}")
+            return jsonify({'success': False, 'message': 'Patient not found'})
+        
+        # Get doctor details
+        doctor = conn.execute('''
+            SELECT u.*, dp.specialization, dp.license_number
+            FROM users u
+            JOIN doctor_profiles dp ON u.id = dp.user_id
+            WHERE u.id = ?
+        ''', (session['user_id'],)).fetchone()
+        
+        # Generate prescription number
+        prescription_number = generate_prescription_number()
+        app.logger.info(f"Generated prescription number: {prescription_number}")
+        
+        # Calculate valid until date
+        valid_until = datetime.now().date() + timedelta(days=valid_days)
+        valid_until_str = valid_until.strftime('%Y-%m-%d')
+        
+        # Create prescription
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO prescriptions (patient_id, doctor_id, prescription_number, medications, instructions, diagnosis, valid_until)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (patient_id, session['user_id'], prescription_number, medications, instructions, diagnosis, valid_until_str))
+        
+        prescription_id = cursor.lastrowid
+        app.logger.info(f"Prescription created with ID: {prescription_id}")
+        
+        # Send email if requested
+        email_sent = False
+        if send_email and patient['email']:
+            app.logger.info(f"Attempting to send email to: {patient['email']}")
+            email_body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <h1 style="color: #2c5aa0; margin-bottom: 10px;">🏥 MedTrak Prescription</h1>
+                        <p style="color: #666; margin: 0;">Digital Prescription Service</p>
+                    </div>
+                    
+                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h2 style="color: #2c5aa0; margin-top: 0;">Prescription Details</h2>
+                        <p><strong>Prescription Number:</strong> {prescription_number}</p>
+                        <p><strong>Date Issued:</strong> {datetime.now().strftime('%B %d, %Y')}</p>
+                        <p><strong>Valid Until:</strong> {valid_until.strftime('%B %d, %Y')}</p>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="color: #2c5aa0;">Patient Information</h3>
+                        <p><strong>Name:</strong> {patient['first_name']} {patient['last_name']}</p>
+                        <p><strong>Date of Birth:</strong> {patient['date_of_birth'] or 'Not provided'}</p>
+                        <p><strong>Gender:</strong> {patient['gender'] or 'Not specified'}</p>
+                        {f"<p><strong>Allergies:</strong> <span style='color: #dc3545;'>{patient['allergies']}</span></p>" if patient['allergies'] else ""}
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="color: #2c5aa0;">Doctor Information</h3>
+                        <p><strong>Dr. {doctor['first_name']} {doctor['last_name']}</strong></p>
+                        <p><strong>Specialization:</strong> {doctor['specialization']}</p>
+                        <p><strong>License Number:</strong> {doctor['license_number']}</p>
+                    </div>
+                    
+                    {f"<div style='margin-bottom: 20px;'><h3 style='color: #2c5aa0;'>Diagnosis</h3><p>{diagnosis}</p></div>" if diagnosis else ""}
+                    
+                    <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="color: #2c5aa0; margin-top: 0;">💊 Prescribed Medications</h3>
+                        <div style="white-space: pre-line; font-family: monospace; background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #2c5aa0;">
 {medications}
+                        </div>
+                    </div>
+                    
+                    {f"<div style='margin-bottom: 20px;'><h3 style='color: #2c5aa0;'>📋 Instructions</h3><p style='background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107;'>{instructions}</p></div>" if instructions else ""}
+                    
+                    <div style="background-color: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="color: #155724; margin-top: 0;">⚠️ Important Notes:</h4>
+                        <ul style="margin: 0; color: #155724;">
+                            <li>Take medications exactly as prescribed</li>
+                            <li>Complete the full course even if you feel better</li>
+                            <li>Contact your doctor if you experience any side effects</li>
+                            <li>This prescription is valid until {valid_until.strftime('%B %d, %Y')}</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+                        <p style="color: #666; margin: 0;">This is a digitally generated prescription from MedTrak</p>
+                        <p style="color: #666; margin: 5px 0 0 0; font-size: 12px;">For any queries, please contact your healthcare provider</p>
                     </div>
                 </div>
-                
-                {f"<div style='margin-bottom: 20px;'><h3 style='color: #2c5aa0;'>📋 Instructions</h3><p style='background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107;'>{instructions}</p></div>" if instructions else ""}
-                
-                <div style="background-color: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h4 style="color: #155724; margin-top: 0;">⚠️ Important Notes:</h4>
-                    <ul style="margin: 0; color: #155724;">
-                        <li>Take medications exactly as prescribed</li>
-                        <li>Complete the full course even if you feel better</li>
-                        <li>Contact your doctor if you experience any side effects</li>
-                        <li>This prescription is valid until {valid_until.strftime('%B %d, %Y')}</li>
-                    </ul>
-                </div>
-                
-                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
-                    <p style="color: #666; margin: 0;">This is a digitally generated prescription from MedTrak</p>
-                    <p style="color: #666; margin: 5px 0 0 0; font-size: 12px;">For any queries, please contact your healthcare provider</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+            </body>
+            </html>
+            """
+            
+            subject = f"Prescription from Dr. {doctor['first_name']} {doctor['last_name']} - {prescription_number}"
+            email_sent = send_email(patient['email'], subject, email_body)
+            
+            if email_sent:
+                cursor.execute('''
+                    UPDATE prescriptions SET email_sent = 1 WHERE id = ?
+                ''', (prescription_id,))
+                app.logger.info("Email sent successfully")
+            else:
+                app.logger.warning("Email sending failed")
         
-        subject = f"Prescription from Dr. {doctor['first_name']} {doctor['last_name']} - {prescription_number}"
-        email_sent = send_email(patient['email'], subject, email_body)
+        conn.commit()
+        conn.close()
         
-        if email_sent:
-            cursor.execute('''
-                UPDATE prescriptions SET email_sent = 1 WHERE id = ?
-            ''', (prescription_id,))
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({
-        'success': True, 
-        'message': f'Prescription created successfully! {"Email sent to patient." if email_sent else ""}',
-        'prescription_number': prescription_number
-    })
+        app.logger.info("Prescription created successfully")
+        return jsonify({
+            'success': True, 
+            'message': f'Prescription created successfully! {"Email sent to patient." if email_sent else ""}',
+            'prescription_number': prescription_number
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error creating prescription: {str(e)}")
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'})
 
 @app.route('/share-record/<int:record_id>', methods=['POST'])
 @login_required
