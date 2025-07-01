@@ -100,7 +100,7 @@
     
     <div class="row">
         <!-- Recent Medical Records -->
-        <div class="col-12">
+        <div class="col-lg-6 mb-4">
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="fas fa-file-medical me-2"></i>My Medical Records</h5>
@@ -158,6 +158,126 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Recent Prescriptions -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-prescription-bottle me-2"></i>My Prescriptions</h5>
+                </div>
+                <div class="card-body">
+                    {% if prescriptions %}
+                        {% for prescription in prescriptions %}
+                        <div class="card mb-3 border-start border-primary border-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="card-title mb-1">
+                                            <i class="fas fa-prescription me-2"></i>{{ prescription.prescription_number }}
+                                        </h6>
+                                        <p class="text-muted mb-2">
+                                            <small>
+                                                <i class="fas fa-user-md me-1"></i>Dr. {{ prescription.first_name }} {{ prescription.last_name }}
+                                                | <i class="fas fa-calendar me-1"></i>{{ prescription.date_issued }}
+                                                | <i class="fas fa-clock me-1"></i>Valid until {{ prescription.valid_until }}
+                                            </small>
+                                        </p>
+                                        {% if prescription.diagnosis %}
+                                            <p class="mb-2"><strong>Diagnosis:</strong> {{ prescription.diagnosis }}</p>
+                                        {% endif %}
+                                    </div>
+                                    <span class="badge bg-{{ 'success' if prescription.status == 'active' else 'secondary' }}">
+                                        {{ prescription.status.title() }}
+                                    </span>
+                                </div>
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#prescriptionModal" 
+                                            onclick="viewPrescriptionDetails('{{ prescription.prescription_number }}', '{{ prescription.medications }}', '{{ prescription.instructions or '' }}')">
+                                        <i class="fas fa-eye me-1"></i>View Details
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-prescription-bottle fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No prescriptions yet</p>
+                            <small class="text-muted">Your doctors will send prescriptions here via email.</small>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Prescription Details Modal -->
+<div class="modal fade" id="prescriptionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-prescription-bottle me-2"></i>Prescription Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <h6 class="text-primary">Prescription Number</h6>
+                    <p id="modalPrescriptionNumber" class="font-monospace"></p>
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-primary">Medications</h6>
+                    <div id="modalMedications" class="bg-light p-3 rounded" style="white-space: pre-line;"></div>
+                </div>
+                <div class="mb-3" id="modalInstructionsDiv" style="display: none;">
+                    <h6 class="text-primary">Instructions</h6>
+                    <div id="modalInstructions" class="alert alert-warning"></div>
+                </div>
+                <div class="alert alert-info">
+                    <h6 class="alert-heading">Important Reminders:</h6>
+                    <ul class="mb-0">
+                        <li>Take medications exactly as prescribed</li>
+                        <li>Complete the full course even if you feel better</li>
+                        <li>Contact your doctor if you experience any side effects</li>
+                        <li>Do not share medications with others</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="printPrescription()">
+                    <i class="fas fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function viewPrescriptionDetails(prescriptionNumber, medications, instructions) {
+    document.getElementById('modalPrescriptionNumber').textContent = prescriptionNumber;
+    document.getElementById('modalMedications').textContent = medications;
+    
+    if (instructions && instructions.trim()) {
+        document.getElementById('modalInstructions').textContent = instructions;
+        document.getElementById('modalInstructionsDiv').style.display = 'block';
+    } else {
+        document.getElementById('modalInstructionsDiv').style.display = 'none';
+    }
+}
+
+function printPrescription() {
+    window.print();
+}
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
 {% endblock %}
