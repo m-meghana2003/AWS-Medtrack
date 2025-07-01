@@ -6,11 +6,23 @@ import os
 from datetime import datetime, timedelta
 import logging
 from functools import wraps
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Email configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'your-email@gmail.com'  # Update this
+app.config['MAIL_PASSWORD'] = 'your-app-password'     # Update this
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -107,6 +119,28 @@ def init_db():
         )
     ''')
     
+    # Prescriptions table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS prescriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            doctor_id INTEGER NOT NULL,
+            appointment_id INTEGER,
+            prescription_number TEXT UNIQUE NOT NULL,
+            medications TEXT NOT NULL,
+            instructions TEXT,
+            diagnosis TEXT,
+            date_issued DATE DEFAULT CURRENT_DATE,
+            valid_until DATE,
+            status TEXT DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled')),
+            email_sent BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES users (id),
+            FOREIGN KEY (doctor_id) REFERENCES users (id),
+            FOREIGN KEY (appointment_id) REFERENCES appointments (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -139,6 +173,43 @@ def get_db_connection():
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'bmp', 'webp'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def send_email(to_email, subject, body, attachment_path=None):
+    """Send email with optional attachment"""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = app.config['MAIL_USERNAME']
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, "rb") as attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {os.path.basename(attachment_path)}'
+                )
+                msg.attach(part)
+        
+        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+        server.starttls()
+        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        text = msg.as_string()
+        server.sendmail(app.config['MAIL_USERNAME'], to_email, text)
+        server.quit()
+        return True
+    except Exception as e:
+        logging.error(f"Email sending failed: {str(e)}")
+        return False
+
+def generate_prescription_number():
+    """Generate unique prescription number"""
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    return f"RX{timestamp}"
 
 # Routes
 @app.route('/')
@@ -225,7 +296,7 @@ def login():
             session['user_role'] = user['role']
             session['username'] = user['username']
             session['first_name'] = user['first_name']
-            session['profile_picture'] = user['profile_picture']  # Add this line
+            session['profile_picture'] = user['profile_picture']
             
             flash(f'Welcome back, {user["first_name"]}!', 'success')
             
@@ -270,11 +341,22 @@ def patient_dashboard():
         LIMIT 5
     ''', (session['user_id'],)).fetchall()
     
+    # Get recent prescriptions
+    prescriptions = conn.execute('''
+        SELECT p.*, u.first_name, u.last_name
+        FROM prescriptions p
+        JOIN users u ON p.doctor_id = u.id
+        WHERE p.patient_id = ? AND p.status = 'active'
+        ORDER BY p.created_at DESC
+        LIMIT 5
+    ''', (session['user_id'],)).fetchall()
+    
     conn.close()
     
     return render_template('patient_dashboard.html', 
                          appointments=appointments, 
-                         records=records)
+                         records=records,
+                         prescriptions=prescriptions)
 
 @app.route('/doctor/dashboard')
 @login_required
@@ -284,13 +366,14 @@ def doctor_dashboard():
     
     # Get today's appointments
     today = datetime.now().date()
+    today_str = today.strftime('%Y-%m-%d')
     appointments = conn.execute('''
         SELECT a.*, u.first_name, u.last_name, u.phone
         FROM appointments a
         JOIN users u ON a.patient_id = u.id
         WHERE a.doctor_id = ? AND a.appointment_date = ? AND a.status = 'scheduled'
         ORDER BY a.appointment_time
-    ''', (session['user_id'], today)).fetchall()
+    ''', (session['user_id'], today_str)).fetchall()
     
     # Get upcoming appointments
     upcoming = conn.execute('''
@@ -300,13 +383,39 @@ def doctor_dashboard():
         WHERE a.doctor_id = ? AND a.appointment_date > ? AND a.status = 'scheduled'
         ORDER BY a.appointment_date, a.appointment_time
         LIMIT 10
-    ''', (session['user_id'], today)).fetchall()
+    ''', (session['user_id'], today_str)).fetchall()
     
     conn.close()
     
     return render_template('doctor_dashboard.html', 
                          today_appointments=appointments,
                          upcoming_appointments=upcoming)
+
+@app.route('/api/doctor/appointments/count')
+@login_required
+@role_required('doctor')
+def get_appointment_count():
+    """API endpoint to get current appointment count for auto-refresh"""
+    conn = get_db_connection()
+    
+    today = datetime.now().date()
+    today_str = today.strftime('%Y-%m-%d')
+    today_count = conn.execute('''
+        SELECT COUNT(*) as count FROM appointments 
+        WHERE doctor_id = ? AND appointment_date = ? AND status = 'scheduled'
+    ''', (session['user_id'], today_str)).fetchone()['count']
+    
+    upcoming_count = conn.execute('''
+        SELECT COUNT(*) as count FROM appointments 
+        WHERE doctor_id = ? AND appointment_date > ? AND status = 'scheduled'
+    ''', (session['user_id'], today_str)).fetchone()['count']
+    
+    conn.close()
+    
+    return jsonify({
+        'today_count': today_count,
+        'upcoming_count': upcoming_count
+    })
 
 @app.route('/book-appointment', methods=['GET', 'POST'])
 @login_required
@@ -606,6 +715,204 @@ def doctor_patient_records(patient_id=None):
                          selected_patient=selected_patient,
                          records=records)
 
+@app.route('/doctor/prescriptions')
+@login_required
+@role_required('doctor')
+def doctor_prescriptions():
+    conn = get_db_connection()
+    
+    # Get doctor's patients for prescription
+    patients = conn.execute('''
+        SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, u.phone
+        FROM users u
+        JOIN appointments a ON u.id = a.patient_id
+        WHERE u.role = 'patient' AND a.doctor_id = ?
+        ORDER BY u.first_name, u.last_name
+    ''', (session['user_id'],)).fetchall()
+    
+    # Get recent prescriptions
+    prescriptions = conn.execute('''
+        SELECT p.*, u.first_name, u.last_name, u.email
+        FROM prescriptions p
+        JOIN users u ON p.patient_id = u.id
+        WHERE p.doctor_id = ?
+        ORDER BY p.created_at DESC
+        LIMIT 20
+    ''', (session['user_id'],)).fetchall()
+    
+    conn.close()
+    
+    return render_template('doctor_prescriptions.html', 
+                         patients=patients,
+                         prescriptions=prescriptions)
+
+@app.route('/api/patient/<int:patient_id>')
+@login_required
+@role_required('doctor')
+def get_patient_details(patient_id):
+    """API endpoint to get patient details for prescription form"""
+    conn = get_db_connection()
+    
+    patient = conn.execute('''
+        SELECT u.*, pp.date_of_birth, pp.gender, pp.blood_type, pp.allergies, pp.medical_history
+        FROM users u
+        LEFT JOIN patient_profiles pp ON u.id = pp.user_id
+        WHERE u.id = ? AND u.role = 'patient'
+    ''', (patient_id,)).fetchone()
+    
+    conn.close()
+    
+    if patient:
+        return jsonify({
+            'success': True,
+            'patient': {
+                'id': patient['id'],
+                'name': f"{patient['first_name']} {patient['last_name']}",
+                'email': patient['email'],
+                'phone': patient['phone'],
+                'date_of_birth': patient['date_of_birth'],
+                'gender': patient['gender'],
+                'blood_type': patient['blood_type'],
+                'allergies': patient['allergies'],
+                'medical_history': patient['medical_history']
+            }
+        })
+    else:
+        return jsonify({'success': False, 'message': 'Patient not found'})
+
+@app.route('/create-prescription', methods=['POST'])
+@login_required
+@role_required('doctor')
+def create_prescription():
+    patient_id = request.form.get('patient_id')
+    medications = request.form.get('medications')
+    instructions = request.form.get('instructions')
+    diagnosis = request.form.get('diagnosis')
+    valid_days = int(request.form.get('valid_days', 30))
+    send_email = request.form.get('send_email') == 'on'
+    
+    if not all([patient_id, medications]):
+        return jsonify({'success': False, 'message': 'Patient and medications are required'})
+    
+    conn = get_db_connection()
+    
+    # Get patient details
+    patient = conn.execute('''
+        SELECT u.*, pp.date_of_birth, pp.gender, pp.allergies
+        FROM users u
+        LEFT JOIN patient_profiles pp ON u.id = pp.user_id
+        WHERE u.id = ? AND u.role = 'patient'
+    ''', (patient_id,)).fetchone()
+    
+    if not patient:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Patient not found'})
+    
+    # Get doctor details
+    doctor = conn.execute('''
+        SELECT u.*, dp.specialization, dp.license_number
+        FROM users u
+        JOIN doctor_profiles dp ON u.id = dp.user_id
+        WHERE u.id = ?
+    ''', (session['user_id'],)).fetchone()
+    
+    # Generate prescription number
+    prescription_number = generate_prescription_number()
+    
+    # Calculate valid until date
+    valid_until = datetime.now().date() + timedelta(days=valid_days)
+    valid_until_str = valid_until.strftime('%Y-%m-%d')
+    
+    # Create prescription
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO prescriptions (patient_id, doctor_id, prescription_number, medications, instructions, diagnosis, valid_until)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (patient_id, session['user_id'], prescription_number, medications, instructions, diagnosis, valid_until_str))
+    
+    prescription_id = cursor.lastrowid
+    
+    # Send email if requested
+    email_sent = False
+    if send_email and patient['email']:
+        email_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="color: #2c5aa0; margin-bottom: 10px;">🏥 MedTrak Prescription</h1>
+                    <p style="color: #666; margin: 0;">Digital Prescription Service</p>
+                </div>
+                
+                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h2 style="color: #2c5aa0; margin-top: 0;">Prescription Details</h2>
+                    <p><strong>Prescription Number:</strong> {prescription_number}</p>
+                    <p><strong>Date Issued:</strong> {datetime.now().strftime('%B %d, %Y')}</p>
+                    <p><strong>Valid Until:</strong> {valid_until.strftime('%B %d, %Y')}</p>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #2c5aa0;">Patient Information</h3>
+                    <p><strong>Name:</strong> {patient['first_name']} {patient['last_name']}</p>
+                    <p><strong>Date of Birth:</strong> {patient['date_of_birth'] or 'Not provided'}</p>
+                    <p><strong>Gender:</strong> {patient['gender'] or 'Not specified'}</p>
+                    {f"<p><strong>Allergies:</strong> <span style='color: #dc3545;'>{patient['allergies']}</span></p>" if patient['allergies'] else ""}
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #2c5aa0;">Doctor Information</h3>
+                    <p><strong>Dr. {doctor['first_name']} {doctor['last_name']}</strong></p>
+                    <p><strong>Specialization:</strong> {doctor['specialization']}</p>
+                    <p><strong>License Number:</strong> {doctor['license_number']}</p>
+                </div>
+                
+                {f"<div style='margin-bottom: 20px;'><h3 style='color: #2c5aa0;'>Diagnosis</h3><p>{diagnosis}</p></div>" if diagnosis else ""}
+                
+                <div style="background-color: #e8f4fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="color: #2c5aa0; margin-top: 0;">💊 Prescribed Medications</h3>
+                    <div style="white-space: pre-line; font-family: monospace; background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #2c5aa0;">
+{medications}
+                    </div>
+                </div>
+                
+                {f"<div style='margin-bottom: 20px;'><h3 style='color: #2c5aa0;'>📋 Instructions</h3><p style='background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107;'>{instructions}</p></div>" if instructions else ""}
+                
+                <div style="background-color: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: #155724; margin-top: 0;">⚠️ Important Notes:</h4>
+                    <ul style="margin: 0; color: #155724;">
+                        <li>Take medications exactly as prescribed</li>
+                        <li>Complete the full course even if you feel better</li>
+                        <li>Contact your doctor if you experience any side effects</li>
+                        <li>This prescription is valid until {valid_until.strftime('%B %d, %Y')}</li>
+                    </ul>
+                </div>
+                
+                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+                    <p style="color: #666; margin: 0;">This is a digitally generated prescription from MedTrak</p>
+                    <p style="color: #666; margin: 5px 0 0 0; font-size: 12px;">For any queries, please contact your healthcare provider</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        subject = f"Prescription from Dr. {doctor['first_name']} {doctor['last_name']} - {prescription_number}"
+        email_sent = send_email(patient['email'], subject, email_body)
+        
+        if email_sent:
+            cursor.execute('''
+                UPDATE prescriptions SET email_sent = 1 WHERE id = ?
+            ''', (prescription_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'success': True, 
+        'message': f'Prescription created successfully! {"Email sent to patient." if email_sent else ""}',
+        'prescription_number': prescription_number
+    })
+
 @app.route('/share-record/<int:record_id>', methods=['POST'])
 @login_required
 @role_required('doctor')
@@ -636,10 +943,9 @@ def share_record(record_id):
 
 @app.route('/upload-record', methods=['POST'])
 @login_required
-@role_required('doctor')  # Change this to require doctor role
+@role_required('doctor')
 def upload_record():
     if 'file' not in request.files:
-        # Allow records without files (text-only records)
         file = None
     else:
         file = request.files['file']
@@ -695,6 +1001,159 @@ def upload_record():
 @login_required
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/complete-appointment/<int:appointment_id>', methods=['POST'])
+@login_required
+@role_required('doctor')
+def complete_appointment(appointment_id):
+    conn = get_db_connection()
+    
+    # Verify the appointment belongs to this doctor
+    appointment = conn.execute('''
+        SELECT * FROM appointments 
+        WHERE id = ? AND doctor_id = ? AND status = 'scheduled'
+    ''', (appointment_id, session['user_id'])).fetchone()
+    
+    if not appointment:
+        flash('Appointment not found or already completed.', 'error')
+        conn.close()
+        return redirect(url_for('doctor_dashboard'))
+    
+    # Mark appointment as completed
+    conn.execute('''
+        UPDATE appointments 
+        SET status = 'completed' 
+        WHERE id = ?
+    ''', (appointment_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    flash('Appointment marked as completed successfully!', 'success')
+    return redirect(url_for('view_appointment', appointment_id=appointment_id))
+
+@app.route('/update-appointment-notes/<int:appointment_id>', methods=['POST'])
+@login_required
+@role_required('doctor')
+def update_appointment_notes(appointment_id):
+    notes = request.form.get('notes', '')
+    
+    conn = get_db_connection()
+    
+    # Verify the appointment belongs to this doctor
+    appointment = conn.execute('''
+        SELECT * FROM appointments 
+        WHERE id = ? AND doctor_id = ?
+    ''', (appointment_id, session['user_id'])).fetchone()
+    
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        conn.close()
+        return redirect(url_for('doctor_dashboard'))
+    
+    # Update appointment notes
+    conn.execute('''
+        UPDATE appointments 
+        SET notes = ? 
+        WHERE id = ?
+    ''', (notes, appointment_id))
+    
+    conn.commit()
+    conn.close()
+    
+    flash('Appointment notes updated successfully!', 'success')
+    return redirect(url_for('view_appointment', appointment_id=appointment_id))
+
+@app.route('/cancel-appointment/<int:appointment_id>', methods=['POST'])
+@login_required
+def cancel_appointment(appointment_id):
+    conn = get_db_connection()
+    
+    # Get appointment details
+    appointment = conn.execute('''
+        SELECT * FROM appointments WHERE id = ?
+    ''', (appointment_id,)).fetchone()
+    
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        conn.close()
+        return redirect(url_for('patient_dashboard' if session['user_role'] == 'patient' else 'doctor_dashboard'))
+    
+    # Check permissions
+    if session['user_role'] == 'patient' and appointment['patient_id'] != session['user_id']:
+        flash('Access denied.', 'error')
+        conn.close()
+        return redirect(url_for('patient_dashboard'))
+    elif session['user_role'] == 'doctor' and appointment['doctor_id'] != session['user_id']:
+        flash('Access denied.', 'error')
+        conn.close()
+        return redirect(url_for('doctor_dashboard'))
+    
+    # Cancel appointment
+    conn.execute('''
+        UPDATE appointments 
+        SET status = 'cancelled' 
+        WHERE id = ?
+    ''', (appointment_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    flash('Appointment cancelled successfully.', 'success')
+    return redirect(url_for('patient_dashboard' if session['user_role'] == 'patient' else 'doctor_dashboard'))
+
+@app.route('/reschedule-appointment/<int:appointment_id>', methods=['POST'])
+@login_required
+def reschedule_appointment(appointment_id):
+    new_date = request.form.get('new_date')
+    new_time = request.form.get('new_time')
+    
+    if not new_date or not new_time:
+        flash('Please provide both new date and time.', 'error')
+        return redirect(url_for('view_appointment', appointment_id=appointment_id))
+    
+    conn = get_db_connection()
+    
+    # Get appointment details
+    appointment = conn.execute('''
+        SELECT * FROM appointments WHERE id = ?
+    ''', (appointment_id,)).fetchone()
+    
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        conn.close()
+        return redirect(url_for('patient_dashboard'))
+    
+    # Check permissions (only patients can reschedule their own appointments)
+    if session['user_role'] != 'patient' or appointment['patient_id'] != session['user_id']:
+        flash('Access denied.', 'error')
+        conn.close()
+        return redirect(url_for('patient_dashboard'))
+    
+    # Check if new slot is available
+    existing = conn.execute('''
+        SELECT id FROM appointments 
+        WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? 
+        AND status = 'scheduled' AND id != ?
+    ''', (appointment['doctor_id'], new_date, new_time, appointment_id)).fetchone()
+    
+    if existing:
+        flash('The selected time slot is already booked. Please choose another time.', 'error')
+        conn.close()
+        return redirect(url_for('view_appointment', appointment_id=appointment_id))
+    
+    # Update appointment
+    conn.execute('''
+        UPDATE appointments 
+        SET appointment_date = ?, appointment_time = ?, status = 'scheduled'
+        WHERE id = ?
+    ''', (new_date, new_time, appointment_id))
+    
+    conn.commit()
+    conn.close()
+    
+    flash('Appointment rescheduled successfully!', 'success')
+    return redirect(url_for('view_appointment', appointment_id=appointment_id))
 
 if __name__ == '__main__':
     init_db()
