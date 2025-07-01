@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Rate Limited - MedTrak{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <div class="error-page">
+                <h1 class="display-1 text-info">429</h1>
+                <h2 class="mb-4">Too Many Requests</h2>
+                <p class="lead mb-4">You're making requests too quickly. Please slow down and try again.</p>
+                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">
+                        <i class="fas fa-home me-2"></i>Go Home
+                    </a>
+                    <button onclick="setTimeout(() => location.reload(), 5000)" class="btn btn-outline-secondary">
+                        <i class="fas fa-clock me-2"></i>Wait & Retry
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
