@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Prescriptions - MedTrak{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-prescription me-2"></i>Prescription Management
+                <a href="{{ url_for('doctor_dashboard') }}" class="btn btn-outline-secondary btn-sm ms-3">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Create New Prescription -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Create New Prescription</h5>
+                </div>
+                <div class="card-body">
+                    <form id="prescriptionForm">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="patient_select" class="form-label">Select Patient</label>
+                                <select class="form-select" id="patient_select" name="patient_id" required onchange="loadPatientDetails()">
+                                    <option value="">Choose a patient...</option>
+                                    {% for patient in patients %}
+                                    <option value="{{ patient.id }}">{{ patient.first_name }} {{ patient.last_name }} - {{ patient.email }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="valid_days" class="form-label">Valid for (days)</label>
+                                <select class="form-select" id="valid_days" name="valid_days">
+                                    <option value="7">7 days</option>
+                                    <option value="15">15 days</option>
+                                    <option value="30" selected>30 days</option>
+                                    <option value="60">60 days</option>
+                                    <option value="90">90 days</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Patient Details Display -->
+                        <div id="patientDetails" class="alert alert-info" style="display: none;">
+                            <h6><i class="fas fa-user me-2"></i>Patient Information</h6>
+                            <div id="patientInfo"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="diagnosis" class="form-label">Diagnosis</label>
+                            <input type="text" class="form-control" id="diagnosis" name="diagnosis" placeholder="Enter diagnosis...">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="medications" class="form-label">Medications</label>
+                            <textarea class="form-control" id="medications" name="medications" rows="6" required 
+                                      placeholder="Enter medications with dosage and frequency:&#10;&#10;Example:&#10;1. Amoxicillin 500mg - Take 1 capsule 3 times daily for 7 days&#10;2. Paracetamol 500mg - Take 1 tablet every 6 hours as needed for pain&#10;3. Vitamin D3 1000IU - Take 1 tablet daily"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="instructions" class="form-label">Additional Instructions</label>
+                            <textarea class="form-control" id="instructions" name="instructions" rows="3" 
+                                      placeholder="Special instructions, warnings, or notes for the patient..."></textarea>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="send_email" name="send_email" checked>
+                            <label class="form-check-label" for="send_email">
+                                <i class="fas fa-envelope me-1"></i>Send prescription via email to patient
+                            </label>
+                        </div>
+                        
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-prescription-bottle me-2"></i>Create Prescription
+                            </button>
+                            <button type="reset" class="btn btn-secondary">
+                                <i class="fas fa-undo me-2"></i>Reset Form
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Templates -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>Quick Templates</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary btn-sm" onclick="useTemplate('common_cold')">
+                            <i class="fas fa-thermometer-half me-1"></i>Common Cold
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="useTemplate('fever')">
+                            <i class="fas fa-fire me-1"></i>Fever & Pain
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="useTemplate('antibiotics')">
+                            <i class="fas fa-pills me-1"></i>Antibiotic Course
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="useTemplate('vitamins')">
+                            <i class="fas fa-leaf me-1"></i>Vitamin Supplements
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="useTemplate('hypertension')">
+                            <i class="fas fa-heartbeat me-1"></i>Hypertension
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Prescription Guidelines</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled small">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Include complete medication names</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Specify exact dosage and frequency</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Mention duration of treatment</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Add special instructions if needed</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Consider patient allergies</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Prescriptions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Prescriptions</h5>
+                </div>
+                <div class="card-body">
+                    {% if prescriptions %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Prescription #</th>
+                                        <th>Patient</th>
+                                        <th>Date Issued</th>
+                                        <th>Valid Until</th>
+                                        <th>Status</th>
+                                        <th>Email Sent</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for prescription in prescriptions %}
+                                    <tr>
+                                        <td><code>{{ prescription.prescription_number }}</code></td>
+                                        <td>{{ prescription.first_name }} {{ prescription.last_name }}</td>
+                                        <td>{{ prescription.date_issued }}</td>
+                                        <td>{{ prescription.valid_until }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if prescription.status == 'active' else 'secondary' }}">
+                                                {{ prescription.status.title() }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if prescription.email_sent %}
+                                                <i class="fas fa-check-circle text-success" title="Email sent"></i>
+                                            {% else %}
+                                                <i class="fas fa-times-circle text-muted" title="Email not sent"></i>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info" onclick="viewPrescription('{{ prescription.prescription_number }}')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            {% if not prescription.email_sent %}
+                                                <button class="btn btn-sm btn-outline-success" onclick="resendPrescription({{ prescription.id }})">
+                                                    <i class="fas fa-envelope"></i>
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-prescription-bottle fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No prescriptions created yet</p>
+                            <small class="text-muted">Create your first prescription using the form above</small>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Prescription templates
+const templates = {
+    common_cold: {
+        diagnosis: "Common Cold",
+        medications: `1. Paracetamol 500mg - Take 1 tablet every 6 hours for fever and pain
+2. Cetirizine 10mg - Take 1 tablet daily for runny nose
+3. Cough syrup - Take 2 teaspoons 3 times daily
+4. Vitamin C 500mg - Take 1 tablet daily`,
+        instructions: "Rest well, drink plenty of fluids, and avoid cold foods. Return if symptoms worsen or persist beyond 7 days."
+    },
+    fever: {
+        diagnosis: "Fever and Body Pain",
+        medications: `1. Paracetamol 650mg - Take 1 tablet every 8 hours for fever
+2. Ibuprofen 400mg - Take 1 tablet twice daily after meals for pain
+3. ORS sachets - Mix 1 sachet in 200ml water, drink as needed`,
+        instructions: "Monitor temperature regularly. Seek immediate medical attention if fever exceeds 102°F or persists beyond 3 days."
+    },
+    antibiotics: {
+        diagnosis: "Bacterial Infection",
+        medications: `1. Amoxicillin 500mg - Take 1 capsule 3 times daily for 7 days
+2. Paracetamol 500mg - Take 1 tablet every 6 hours as needed for pain
+3. Probiotics - Take 1 capsule daily during and after antibiotic course`,
+        instructions: "Complete the full antibiotic course even if you feel better. Take with food to avoid stomach upset."
+    },
+    vitamins: {
+        diagnosis: "Vitamin Deficiency / General Health",
+        medications: `1. Multivitamin tablet - Take 1 tablet daily after breakfast
+2. Vitamin D3 1000IU - Take 1 tablet daily
+3. Vitamin B12 500mcg - Take 1 tablet daily
+4. Calcium + Magnesium - Take 1 tablet daily after dinner`,
+        instructions: "Take vitamins with meals for better absorption. Continue for 3 months and then review."
+    },
+    hypertension: {
+        diagnosis: "Hypertension",
+        medications: `1. Amlodipine 5mg - Take 1 tablet daily in the morning
+2. Metoprolol 25mg - Take 1 tablet twice daily
+3. Aspirin 75mg - Take 1 tablet daily after dinner`,
+        instructions: "Monitor blood pressure regularly. Maintain low-salt diet and regular exercise. Follow up in 2 weeks."
+    }
+};
+
+function useTemplate(templateName) {
+    const template = templates[templateName];
+    if (template) {
+        document.getElementById('diagnosis').value = template.diagnosis;
+        document.getElementById('medications').value = template.medications;
+        document.getElementById('instructions').value = template.instructions;
+    }
+}
+
+function loadPatientDetails() {
+    const patientId = document.getElementById('patient_select').value;
+    if (patientId) {
+        fetch(`/api/patient/${patientId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const patient = data.patient;
+                    const detailsHtml = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Name:</strong> ${patient.name}</p>
+                                <p class="mb-1"><strong>Email:</strong> ${patient.email}</p>
+                                <p class="mb-1"><strong>Phone:</strong> ${patient.phone || 'Not provided'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>DOB:</strong> ${patient.date_of_birth || 'Not provided'}</p>
+                                <p class="mb-1"><strong>Blood Type:</strong> ${patient.blood_type || 'Not specified'}</p>
+                                ${patient.allergies ? `<p class="mb-1"><strong>Allergies:</strong> <span class="text-danger">${patient.allergies}</span></p>` : ''}
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('patientInfo').innerHTML = detailsHtml;
+                    document.getElementById('patientDetails').style.display = 'block';
+                } else {
+                    document.getElementById('patientDetails').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading patient details:', error);
+                document.getElementById('patientDetails').style.display = 'none';
+            });
+    } else {
+        document.getElementById('patientDetails').style.display = 'none';
+    }
+}
+
+// Handle prescription form submission
+document.getElementById('prescriptionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('/create-prescription', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            this.reset();
+            document.getElementById('patientDetails').style.display = 'none';
+            // Refresh the page to show new prescription
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error creating prescription');
+        console.error('Error:', error);
+    });
+});
+
+function viewPrescription(prescriptionNumber) {
+    alert(`Viewing prescription: ${prescriptionNumber}\n\nThis feature will open a detailed view of the prescription.`);
+}
+
+function resendPrescription(prescriptionId) {
+    if (confirm('Resend prescription email to patient?')) {
+        // Implementation for resending prescription email
+        alert('Email resent successfully!');
+    }
+}
+</script>
+{% endblock %}
